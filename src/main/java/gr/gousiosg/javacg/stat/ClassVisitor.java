@@ -28,7 +28,10 @@
 
 package gr.gousiosg.javacg.stat;
 
-import org.apache.bcel.classfile.Constant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.bcel.classfile.ConstantPool;
 import org.apache.bcel.classfile.EmptyVisitor;
 import org.apache.bcel.classfile.JavaClass;
@@ -36,40 +39,35 @@ import org.apache.bcel.classfile.Method;
 import org.apache.bcel.generic.ConstantPoolGen;
 import org.apache.bcel.generic.MethodGen;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * The simplest of class visitors, invokes the method visitor class for each
  * method found.
  */
 public class ClassVisitor extends EmptyVisitor {
 
-    private JavaClass clazz;
-    private ConstantPoolGen constants;
-    private String classReferenceFormat;
-    private final DynamicCallManager DCManager = new DynamicCallManager();
-    private List<String> methodCalls = new ArrayList<>();
+	private JavaClass clazz;
+	private ConstantPoolGen constants;
+	private final DynamicCallManager DCManager = new DynamicCallManager();
+	private Map<String, Set<String>> adjacencyList = new HashMap<>();
 
-    public ClassVisitor(JavaClass jc) {
-        clazz = jc;
-        constants = new ConstantPoolGen(clazz.getConstantPool());
-        classReferenceFormat = "C:" + clazz.getClassName() + " %s";
-    }
+	public ClassVisitor(JavaClass jc) {
+		clazz = jc;
+		constants = new ConstantPoolGen(clazz.getConstantPool());
+	}
 
-    public void visitJavaClass(JavaClass jc) {
-        jc.getConstantPool().accept(this);
-        Method[] methods = jc.getMethods();
-        for (int i = 0; i < methods.length; i++) {
-            Method method = methods[i];
-            DCManager.retrieveCalls(method, jc);
-            DCManager.linkCalls(method);
-            method.accept(this);
+	public void visitJavaClass(JavaClass jc) {
+		jc.getConstantPool().accept(this);
+		Method[] methods = jc.getMethods();
+		for (int i = 0; i < methods.length; i++) {
+			Method method = methods[i];
+			DCManager.retrieveCalls(method, jc);
+			DCManager.linkCalls(method);
+			method.accept(this);
 
-        }
-    }
+		}
+	}
 
-    public void visitConstantPool(ConstantPool constantPool) {
+	public void visitConstantPool(ConstantPool constantPool) {
 //        for (int i = 0; i < constantPool.getLength(); i++) {
 //            Constant constant = constantPool.getConstant(i);
 //            if (constant == null)
@@ -80,20 +78,23 @@ public class ClassVisitor extends EmptyVisitor {
 //                System.out.println(String.format(classReferenceFormat, referencedClass));
 //            }
 //        }
-    }
+	}
 
-    public void visitMethod(Method method) {
-        MethodGen mg = new MethodGen(method, clazz.getClassName(), constants);
-        MethodVisitor visitor = new MethodVisitor(mg, clazz);
-        methodCalls.addAll(visitor.start());
-    }
+	public void visitMethod(Method method) {
+		MethodGen mg = new MethodGen(method, clazz.getClassName(), constants);
+		MethodVisitor visitor = new MethodVisitor(mg, clazz);
+		String callingMethod = clazz.getClassName() + ":" + mg.getName() + "("
+				+ MethodVisitor.argumentList(mg.getArgumentTypes()) + ")";
+		adjacencyList.put(callingMethod, visitor.start());
+	}
 
-    public ClassVisitor start() {
-        visitJavaClass(clazz);
-        return this;
-    }
+	public ClassVisitor start() {
+		visitJavaClass(clazz);
+		return this;
+	}
 
-    public List<String> methodCalls() {
-        return this.methodCalls;
-    }
+	public Map<String, Set<String>> adjacencyList() {
+		return this.adjacencyList;
+	}
+
 }

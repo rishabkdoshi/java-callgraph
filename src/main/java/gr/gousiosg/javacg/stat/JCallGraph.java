@@ -33,9 +33,12 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import gr.gousiosg.javacg.stat.graph.Graph;
+import gr.gousiosg.javacg.stat.graph.GraphUtil;
 import org.apache.bcel.classfile.ClassParser;
 
 /**
@@ -48,6 +51,7 @@ public class JCallGraph {
 
     public static void main(String[] args) {
 
+
         Function<ClassParser, ClassVisitor> getClassVisitor =
                 (ClassParser cp) -> {
                     try {
@@ -58,6 +62,7 @@ public class JCallGraph {
                 };
 
         String mainClass = System.getProperty("mainClass");
+        String originFormat = "%s:main(java.lang.String[])";
 
         //reset the mainClass property
         System.setProperty("mainClass","");
@@ -73,46 +78,33 @@ public class JCallGraph {
 
                 try (JarFile jar = new JarFile(f)) {
                     Stream<JarEntry> entries = enumerationAsStream(jar.entries());
-                    String methodCalls  = null;
 
-                    if(mainClass!=null){
-                        final String mainClassName = mainClass+".class";
-                        methodCalls = entries.
-                                flatMap(e -> {
-                                    if (e.isDirectory() || !e.getName().endsWith(".class"))
-                                        return (new ArrayList<String>()).stream();
+                    Map<String, Set<Set<String>>> adjList = entries.flatMap(e -> {
+                        if (e.isDirectory() || !e.getName().endsWith(".class"))
+                            return (new HashMap<String,Set<String>>().entrySet()).stream();
 
-                                    String className = e.getName().replace("/",".");
+                        ClassParser cp = new ClassParser(arg, e.getName());
+                        return getClassVisitor.apply(cp).start().adjacencyList().entrySet().stream();
+                    }).collect(Collectors.groupingBy(
+                            Map.Entry<String,Set<String>>::getKey,
+                            Collectors.mapping(Map.Entry<String,Set<String>>::getValue, Collectors.toSet()))
+                    );
 
-                                    if(mainClassName.equals(className)){
-                                        ClassParser cp = new ClassParser(arg, e.getName());
-                                        return getClassVisitor.apply(cp).start().methodCalls().stream();
-                                    }else{
-                                        return (new ArrayList<String>()).stream();
-                                    }
-                                }).
-                                map(s -> s + "\n").
-                                reduce(new StringBuilder(),
-                                        StringBuilder::append,
-                                        StringBuilder::append).toString();
-                    }else{
-                        methodCalls = entries.
-                                flatMap(e -> {
-                                    if (e.isDirectory() || !e.getName().endsWith(".class"))
-                                        return (new ArrayList<String>()).stream();
+                    String origin = String.format(originFormat,mainClass);
 
+                    //build a graph with nodes and edges
+                    Graph g = GraphUtil.buildGraph(adjList);
 
-                                    ClassParser cp = new ClassParser(arg, e.getName());
-                                    return getClassVisitor.apply(cp).start().methodCalls().stream();
-                                }).
-                                map(s -> s + "\n").
-                                reduce(new StringBuilder(),
-                                        StringBuilder::append,
-                                        StringBuilder::append).toString();
-                    }
+                    String reachableMethods = g.
+                            getReachableMethods(origin).
+                            stream().
+                            map(s -> s+"\n").
+                            reduce(new StringBuilder(),
+                                    StringBuilder::append,
+                                    StringBuilder::append).toString();
 
                     BufferedWriter log = new BufferedWriter(new OutputStreamWriter(System.out));
-                    log.write(methodCalls);
+                    log.write(reachableMethods);
                     log.close();
                 }
             }
