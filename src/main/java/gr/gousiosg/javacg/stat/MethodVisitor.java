@@ -90,10 +90,10 @@ public class MethodVisitor extends EmptyVisitor {
 				i.accept(this);
 		}
 		
-		boolean includePrimitives = Boolean.parseBoolean(System.getProperty("includePrimitives"));
+		boolean removePrimitives = Boolean.parseBoolean(System.getProperty("removePrimitives"));
 		
-		if(includePrimitives) {
-			return outboundMethods.stream().filter(method -> {return method.startsWith("java");}).collect(Collectors.toSet());	
+		if(removePrimitives) {
+			return outboundMethods.stream().filter(method -> {return !method.startsWith("java");}).collect(Collectors.toSet());	
 		}else {
 			return outboundMethods;
 		}
